@@ -102,6 +102,10 @@ needs_approval if {
 
 needs_approval if count(approval_reasons) > 0
 
+# A Creature (Nexus DEC-246): the only agent that may act with no human in the loop. Its type as Trust
+# registered it at release, never as the caller describes it.
+creature if object.get(object.get(input, "agent", {}), "agent_type", "") == "creature"
+
 # An approval step the maker authored in a workflow (effect "approval") always opens an approval.
 needs_approval if action.effect == "approval"
 
@@ -113,8 +117,10 @@ decision := {"decision": "deny", "reasons": sort(denials)} if {
 	input.approval
 } else := {"decision": "approval_required", "reasons": sort(approval_reasons)} if {
 	needs_approval
-} else := {"decision": "deny", "reasons": ["hootl_not_available"]} if {
+} else := {"decision": "deny", "reasons": ["hootl_creature_only"]} if {
+	# HOOTL (no human in the loop) is for Creatures only (Nexus DEC-246)
 	action.oversight_mode == "hootl"
+	not creature
 } else := {"decision": "allow", "reasons": []}
 
 allowed_obligations := sort(obligations) if decision.decision == "allow"

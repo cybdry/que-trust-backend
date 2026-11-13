@@ -38,7 +38,7 @@ async def test_the_decision_token_binds_exactly_this_action(t: Tenant) -> None:
     assert (await _verify(t.c, workspace["decision_token"], "que-workspace"))["aud"] == "que-workspace"
 
 
-async def test_hotl_writes_proceed_with_oversight_and_hootl_is_refused(t: Tenant) -> None:
+async def test_hotl_writes_proceed_with_oversight_and_hootl_is_for_creatures_only(t: Tenant) -> None:
     await t.policies(
         {"id": "ops", "name": "Ops", "stages": [{"stage_key": "ops", "approvers": [{"type": "role", "ref": "ops"}]}]}
     )
@@ -48,7 +48,25 @@ async def test_hotl_writes_proceed_with_oversight_and_hootl_is_refused(t: Tenant
         {"kind": "oversight", "overseers": [{"type": "role", "ref": "ops"}], "review_window_seconds": 900}
     ]
     hootl = await t.decide(t.body(mode="hootl"))
-    assert hootl == {**hootl, "decision": "deny", "reasons": ["hootl_not_available"]}
+    assert hootl == {**hootl, "decision": "deny", "reasons": ["hootl_creature_only"]}
+    # A Creature (Nexus DEC-246) may: its type as Trust registered it at release, never as the caller says
+    version = str(uuid.uuid4())
+    ref = {"owner_product": "nexus", "resource_kind": "asset_version", "resource_key": version}
+    profile = {
+        "agent_type": "creature",
+        "tools": [{"tool_ref": "billing.refund.create", "action_classes": ["refund.create"], "effect": "write"}],
+    }
+    await t.req(
+        "POST",
+        "/agent-profiles",
+        t.nexus,
+        {"version_ref": ref, "manifest_digest": "c0ffee00c0ffee", "profile": profile},
+        expect=201,
+    )
+    creature = await t.decide(t.body(mode="hootl", version=version))
+    assert creature["decision"] == "allow", creature
+    claimed = await t.decide({**t.body(mode="hootl"), "agent_type": "creature"})
+    assert claimed["decision"] == "deny"  # an unregistered agent claiming to be one
 
 
 async def test_tenant_rules_only_strengthen(t: Tenant) -> None:
